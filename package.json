@@ -1,0 +1,35 @@
+{
+  "name": "image-beautifier-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for AI-powered image generation and UI beautification",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js",
+    "test": "node dist/scripts/test.js",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "mcp",
+    "image-generation",
+    "ai",
+    "gemini",
+    "ui-beautification"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "dotenv": "^16.4.5",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

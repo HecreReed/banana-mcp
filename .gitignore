@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+*.log
+outputs/*.png
+outputs/*.webp
+outputs/*.jpg
+outputs/*.jpeg
+!outputs/.gitkeep
+.DS_Store
+*.swp
+*.swo
+*~
