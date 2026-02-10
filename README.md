@@ -2,6 +2,8 @@
 
 A Model Context Protocol (MCP) server that provides AI-powered image generation and UI beautification tools for agents and applications. Built with Node.js and TypeScript, this server enables Claude and other MCP-compatible clients to generate images, icons, hero banners, and beautify UI screenshots.
 
+**Powered by Google's Gemini Nano Banana** - Uses the official Gemini 2.5 Flash Image API (codename "Nano Banana") for fast, high-quality image generation.
+
 ## Features
 
 - **generate_image**: Generate custom images from text prompts with style, size, and format options
@@ -60,6 +62,24 @@ npm run build
 ```bash
 npm start
 ```
+
+## Getting Your Gemini API Key
+
+This server uses Google's **Gemini 2.5 Flash Image** (codename "Nano Banana") for image generation.
+
+1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
+2. Sign in with your Google account
+3. Click "Get API Key" or "Create API Key"
+4. Copy your API key
+5. Add it to your `.env` file as `GEMINI_API_KEY`
+
+**Available Models:**
+- `gemini-2.5-flash-image` - Nano Banana (fast, optimized for speed)
+- `gemini-3-pro-image-preview` - Nano Banana Pro (professional quality, enterprise)
+
+**API Documentation:**
+- [Official Gemini Image Generation Docs](https://ai.google.dev/gemini-api/docs/image-generation)
+- [Nano Banana Guide](https://www.cometapi.com/how-to-use-nano-banana-via-api/)
 
 ## Configuration
 
@@ -283,79 +303,46 @@ To clean up generated files:
 rm outputs/*.png outputs/*.webp
 ```
 
-## Customizing the Gemini Provider
+## About the Gemini Nano Banana Provider
 
-The Gemini provider uses an adapter pattern to work with different API formats. If your Gemini API has different endpoints or response formats, customize these files:
+This server uses the **official Gemini API format** for image generation. The implementation is based on Google's documented API structure:
 
-### 1. API Endpoint
+**API Details:**
+- **Endpoint**: `/v1beta/models/{model}:generateContent`
+- **Authentication**: `x-goog-api-key` header
+- **Request Format**: Official `contents` + `generationConfig` structure
+- **Response Format**: `candidates[0].content.parts[].inline_data.data`
 
-**File**: `src/providers/geminiProvider.ts`
-**Function**: `generateImage()`
-**Line**: ~95
+**Key Features:**
+- Automatic aspect ratio detection (1:1, 16:9, 3:2, etc.)
+- Image size optimization (1K, 2K, 4K)
+- Style enhancement via prompt engineering
+- Base64 image data in responses
 
-```typescript
-const endpoint = `${this.config.baseUrl}/v1/models/${this.config.model}:generateImage`;
+**No customization needed** - the provider works out-of-the-box with the official Gemini API. Just add your API key!
+
+### Advanced: Switching Models
+
+To use **Nano Banana Pro** (higher quality):
+
+```env
+GEMINI_MODEL=gemini-3-pro-image-preview
 ```
 
-Change the endpoint path to match your API.
+### Troubleshooting API Issues
 
-### 2. Request Format
+If you encounter API errors:
 
-**File**: `src/providers/geminiProvider.ts`
-**Function**: `buildRequestBody()`
-**Line**: ~45
+1. **Enable debug logging**:
+   ```env
+   LOG_LEVEL=debug
+   ```
 
-```typescript
-return {
-  model: this.config.model,
-  prompt: options.prompt,
-  parameters: {
-    width,
-    height,
-    style: options.style || 'illustration',
-    background: options.background || 'solid',
-    format: options.format || 'png',
-  },
-};
-```
+2. **Check your API key**: Visit [Google AI Studio](https://aistudio.google.com/apikey)
 
-Adjust the request body structure to match your API's expected format.
+3. **Verify model availability**: Some models may require enterprise access
 
-### 3. Response Parsing
-
-**File**: `src/providers/geminiProvider.ts`
-**Function**: `parseResponse()`
-**Line**: ~58
-
-The function tries multiple common response formats. Add your specific format:
-
-```typescript
-// Your custom format
-if (response.your_field?.image_data) {
-  return {
-    data: response.your_field.image_data,
-    format: 'base64',
-    width,
-    height,
-  };
-}
-```
-
-### 4. Authentication Headers
-
-**File**: `src/providers/geminiProvider.ts`
-**Function**: `generateImage()`
-**Line**: ~102
-
-```typescript
-headers: {
-  'Content-Type': 'application/json',
-  'Authorization': `Bearer ${this.config.apiKey}`,
-  // Alternative: 'x-goog-api-key': this.config.apiKey,
-}
-```
-
-Uncomment or modify the auth header format as needed.
+4. **Review API quotas**: Check your usage limits in Google AI Studio
 
 ## Adding New Providers
 

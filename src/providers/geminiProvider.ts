@@ -13,15 +13,16 @@ interface GeminiConfig {
 }
 
 /**
- * Gemini Image Provider
+ * Gemini Nano Banana Image Provider
  *
- * NOTE: This implementation uses a generic adapter pattern for Gemini's image generation API.
- * The actual API endpoint and response format may vary depending on your Gemini setup.
+ * This implementation uses the official Gemini API format for image generation.
+ * Based on Google's Gemini 2.5 Flash Image (Nano Banana) API.
  *
- * To customize for your specific Gemini API:
- * 1. Update buildRequestBody() to match your API's request format
- * 2. Update parseResponse() to match your API's response format
- * 3. Update the endpoint URL in generateImage() if needed
+ * API Documentation:
+ * - https://ai.google.dev/gemini-api/docs/image-generation
+ * - Model: gemini-2.5-flash-image (Nano Banana)
+ * - Endpoint: /v1beta/models/{model}:generateContent
+ * - Auth: x-goog-api-key header
  */
 export class GeminiProvider implements ImageProvider {
   private config: GeminiConfig;
@@ -35,7 +36,7 @@ export class GeminiProvider implements ImageProvider {
   }
 
   getName(): string {
-    return 'Gemini';
+    return 'Gemini Nano Banana';
   }
 
   isConfigured(): boolean {
@@ -43,34 +44,109 @@ export class GeminiProvider implements ImageProvider {
   }
 
   /**
-   * Build the request body for Gemini API
-   * CUSTOMIZE THIS: Adjust to match your actual Gemini image API format
+   * Build the request body for Gemini Nano Banana API
+   * Uses the official generateContent format
    */
   private buildRequestBody(options: ImageGenerationOptions): any {
     const { width, height } = parseSize(options.size || '1024x1024');
 
-    // Example format - adjust based on your actual API
+    // Build the prompt with style and background preferences
+    let enhancedPrompt = options.prompt;
+
+    if (options.style && options.style !== 'illustration') {
+      const styleDescriptions: Record<string, string> = {
+        '3d': '3D rendered style',
+        'flat': 'flat design style',
+        'photoreal': 'photorealistic style',
+        'anime': 'anime art style',
+        'pixel': 'pixel art style',
+      };
+      enhancedPrompt = `${styleDescriptions[options.style] || options.style}, ${enhancedPrompt}`;
+    }
+
+    if (options.background === 'transparent') {
+      enhancedPrompt += ', transparent background';
+    }
+
+    // Determine aspect ratio from size
+    const aspectRatio = this.getAspectRatio(width, height);
+
+    // Official Gemini API format
     return {
-      model: this.config.model,
-      prompt: options.prompt,
-      parameters: {
-        width,
-        height,
-        style: options.style || 'illustration',
-        background: options.background || 'solid',
-        format: options.format || 'png',
-      },
+      contents: [{
+        parts: [
+          { text: enhancedPrompt }
+        ]
+      }],
+      generationConfig: {
+        responseModalities: ['IMAGE'],
+        imageConfig: {
+          aspectRatio: aspectRatio,
+          // Note: Gemini uses predefined sizes, not exact dimensions
+          // Available: 1K, 2K, 4K
+          imageSize: this.getImageSize(width, height)
+        }
+      }
     };
   }
 
   /**
-   * Parse the response from Gemini API
-   * CUSTOMIZE THIS: Adjust to match your actual Gemini image API response format
+   * Convert width/height to Gemini aspect ratio format
+   */
+  private getAspectRatio(width: number, height: number): string {
+    if (width === height) return '1:1';
+    if (width > height) {
+      // Landscape
+      const ratio = width / height;
+      if (ratio >= 1.4 && ratio <= 1.6) return '3:2';
+      if (ratio >= 1.7) return '16:9';
+      return '4:3';
+    } else {
+      // Portrait
+      const ratio = height / width;
+      if (ratio >= 1.4 && ratio <= 1.6) return '2:3';
+      if (ratio >= 1.7) return '9:16';
+      return '3:4';
+    }
+  }
+
+  /**
+   * Convert dimensions to Gemini image size
+   */
+  private getImageSize(width: number, height: number): string {
+    const maxDim = Math.max(width, height);
+    if (maxDim <= 1024) return '1K';
+    if (maxDim <= 2048) return '2K';
+    return '4K';
+  }
+
+  /**
+   * Parse the response from Gemini Nano Banana API
+   * Official format: candidates[0].content.parts[].inline_data.data
    */
   private parseResponse(response: any, size: string): ImageGenerationResult {
     const { width, height } = parseSize(size);
 
-    // Try multiple possible response formats
+    // Official Gemini response format
+    if (response.candidates && Array.isArray(response.candidates)) {
+      for (const candidate of response.candidates) {
+        if (candidate.content?.parts) {
+          for (const part of candidate.content.parts) {
+            // Image data in inline_data
+            if (part.inline_data?.data) {
+              return {
+                data: part.inline_data.data,
+                format: 'base64',
+                width,
+                height,
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // Fallback: Try alternative formats for compatibility
 
     // Format 1: Direct base64 in 'image' field
     if (response.image && typeof response.image === 'string') {
@@ -102,52 +178,30 @@ export class GeminiProvider implements ImageProvider {
       };
     }
 
-    // Format 4: Nested in 'result' or 'output'
-    if (response.result?.image || response.output?.image) {
-      const imageData = response.result?.image || response.output?.image;
-      return {
-        data: imageData,
-        format: imageData.startsWith('http') ? 'url' : 'base64',
-        width,
-        height,
-      };
-    }
-
-    // Format 5: Array of images (take first)
-    if (Array.isArray(response.images) && response.images.length > 0) {
-      const imageData = response.images[0];
-      return {
-        data: typeof imageData === 'string' ? imageData : imageData.url || imageData.data,
-        format: typeof imageData === 'string' && imageData.startsWith('http') ? 'url' : 'base64',
-        width,
-        height,
-      };
-    }
-
-    throw new Error('Unable to parse image from Gemini response. Check geminiProvider.ts parseResponse()');
+    logger.error('Unable to parse Gemini response:', JSON.stringify(response, null, 2));
+    throw new Error('Unable to parse image from Gemini response. Expected format: candidates[0].content.parts[].inline_data.data');
   }
 
   async generateImage(options: ImageGenerationOptions): Promise<ImageGenerationResult> {
     if (!this.isConfigured()) {
-      throw new Error('Gemini provider not configured. Set GEMINI_API_KEY and GEMINI_BASE_URL');
+      throw new Error('Gemini provider not configured. Set GEMINI_API_KEY in your .env file');
     }
 
     const requestBody = this.buildRequestBody(options);
 
-    // Construct the API endpoint
-    // CUSTOMIZE THIS: Adjust the endpoint path based on your actual Gemini API
-    const endpoint = `${this.config.baseUrl}/v1/models/${this.config.model}:generateImage`;
+    // Official Gemini API endpoint for Nano Banana
+    const endpoint = `${this.config.baseUrl}/v1beta/models/${this.config.model}:generateContent`;
 
-    logger.debug('Gemini API request:', { endpoint, body: requestBody });
+    logger.debug('Gemini Nano Banana API request:', { endpoint, model: this.config.model });
+    logger.debug('Request body:', JSON.stringify(requestBody, null, 2));
 
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          // Alternative auth header format (uncomment if needed):
-          // 'x-goog-api-key': this.config.apiKey,
+          // Official Gemini API uses x-goog-api-key header
+          'x-goog-api-key': this.config.apiKey,
         },
         body: JSON.stringify(requestBody),
       });
@@ -159,7 +213,7 @@ export class GeminiProvider implements ImageProvider {
       }
 
       const data = await response.json();
-      logger.debug('Gemini API response:', data);
+      logger.debug('Gemini API response received');
 
       return this.parseResponse(data, options.size || '1024x1024');
     } catch (error) {
